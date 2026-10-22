@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_AsIs_Var9"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:collaboration id="Collaboration_AsIs_Var9">
+    <bpmn:participant id="Participant_Client" name="Клієнт / Страхувальник (Black Box)" />
+    <bpmn:participant id="Participant_Insurance_AsIs" name="Страхова компанія (Врегулювання ДТП — As-Is)" processRef="Process_Insurance_AsIs" />
+    <bpmn:messageFlow id="MsgFlow_1" name="1. Дзвінок про ДТП" sourceRef="Participant_Client" targetRef="StartEvent_CallReceived" />
+    <bpmn:messageFlow id="MsgFlow_2" name="Запит додаткових довідок" sourceRef="Task_RequestClarification" targetRef="Participant_Client" />
+    <bpmn:messageFlow id="MsgFlow_3" name="Надання паперових довідок" sourceRef="Participant_Client" targetRef="Task_RequestClarification" />
+    <bpmn:messageFlow id="MsgFlow_4" name="2. Підписання паперового протоколу" sourceRef="Participant_Client" targetRef="Task_PaperProtocol" />
+    <bpmn:messageFlow id="MsgFlow_5" name="Лист-відмова поштою" sourceRef="Task_SendRejectionLetter" targetRef="Participant_Client" />
+    <bpmn:messageFlow id="MsgFlow_6" name="3. Виплата коштів та SMS" sourceRef="EndEvent_PayoutComplete" targetRef="Participant_Client" />
+  </bpmn:collaboration>
+
+  <bpmn:process id="Process_Insurance_AsIs" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_AsIs">
+      <bpmn:lane id="Lane_Operator" name="Оператор контакт-центру">
+        <bpmn:flowNodeRef>StartEvent_CallReceived</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_RegisterJournal</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_FindAgentByPhone</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Agent" name="Аварійний комісар (Страховий агент)">
+        <bpmn:flowNodeRef>Task_VisitAccidentSite</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_PaperProtocol</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_DeliverDocsToOffice</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Expert" name="Експерт з оцінки збитків">
+        <bpmn:flowNodeRef>Task_RequestClarification</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_MergeDocs</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ManualVerifyDocs</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_DocsComplete</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ManualExcelCalc</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_IsCovered</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_PaperClaimAct</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_SendRejectionLetter</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>EndEvent_ClaimRejected</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Accounting" name="Бухгалтерія (Відділ виплат)">
+        <bpmn:flowNodeRef>Task_ManualPaymentOrder</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ExecuteBankTransfer</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>EndEvent_PayoutComplete</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+
+    <bpmn:startEvent id="StartEvent_CallReceived" name="Отримано дзвінок про настання ДТП">
+      <bpmn:outgoing>Flow_1</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_Start" />
+    </bpmn:startEvent>
+
+    <bpmn:userTask id="Task_RegisterJournal" name="Зареєструвати звернення в паперовому журналі та опитати клієнта">
+      <bpmn:incoming>Flow_1</bpmn:incoming>
+      <bpmn:outgoing>Flow_2</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:userTask id="Task_FindAgentByPhone" name="Знайти вільного агента по телефону та передати координати ДТП">
+      <bpmn:incoming>Flow_2</bpmn:incoming>
+      <bpmn:outgoing>Flow_3</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:userTask id="Task_VisitAccidentSite" name="Виїхати на місце ДТП та провести візуальний огляд автомобіля">
+      <bpmn:incoming>Flow_3</bpmn:incoming>
+      <bpmn:outgoing>Flow_4</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:userTask id="Task_PaperProtocol" name="Скласти паперовий протокол огляду та зробити фотофіксацію">
+      <bpmn:incoming>Flow_4</bpmn:incoming>
+      <bpmn:outgoing>Flow_5</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:userTask id="Task_DeliverDocsToOffice" name="Передати паперовий пакет документів в офіс компанії">
+      <bpmn:incoming>Flow_5</bpmn:incoming>
+      <bpmn:outgoing>Flow_6</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:exclusiveGateway id="Gateway_MergeDocs" name="Злиття потоків">
+      <bpmn:incoming>Flow_6</bpmn:incoming>
+      <bpmn:incoming>Flow_ReworkDone</bpmn:incoming>
+      <bpmn:outgoing>Flow_7</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:userTask id="Task_ManualVerifyDocs" name="Перевірити паперові документи та діючий поліс вручну">
+      <bpmn:incoming>Flow_7</bpmn:incoming>
+      <bpmn:outgoing>Flow_8</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:exclusiveGateway id="Gateway_DocsComplete" name="Документи повні?">
+      <bpmn:incoming>Flow_8</bpmn:incoming>
+      <bpmn:outgoing>Flow_DocsNo</bpmn:outgoing>
+      <bpmn:outgoing>Flow_DocsYes</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:userTask id="Task_RequestClarification" name="Запросити у клієнта відсутні довідки або виправлення заяви">
+      <bpmn:incoming>Flow_DocsNo</bpmn:incoming>
+      <bpmn:outgoing>Flow_ReworkDone</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:userTask id="Task_ManualExcelCalc" name="Провести ручну оцінку збитків і скласти калькуляцію в Excel">
+      <bpmn:incoming>Flow_DocsYes</bpmn:incoming>
+      <bpmn:outgoing>Flow_9</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:exclusiveGateway id="Gateway_IsCovered" name="Страховий випадок?">
+      <bpmn:incoming>Flow_9</bpmn:incoming>
+      <bpmn:outgoing>Flow_CoveredYes</bpmn:outgoing>
+      <bpmn:outgoing>Flow_CoveredNo</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:userTask id="Task_PaperClaimAct" name="Сформувати паперовий страховий акт і підписати у керівництва">
+      <bpmn:incoming>Flow_CoveredYes</bpmn:incoming>
+      <bpmn:outgoing>Flow_10</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:userTask id="Task_SendRejectionLetter" name="Підготувати та надіслати офіційний лист-відмову поштою">
+      <bpmn:incoming>Flow_CoveredNo</bpmn:incoming>
+      <bpmn:outgoing>Flow_11</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:endEvent id="EndEvent_ClaimRejected" name="Відмовлено у виплаті">
+      <bpmn:incoming>Flow_11</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:userTask id="Task_ManualPaymentOrder" name="Перевірити реквізити та створити платіжне доручення вручну">
+      <bpmn:incoming>Flow_10</bpmn:incoming>
+      <bpmn:outgoing>Flow_12</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:userTask id="Task_ExecuteBankTransfer" name="Провести виплату у клієнт-банку та закрити справу">
+      <bpmn:incoming>Flow_12</bpmn:incoming>
+      <bpmn:outgoing>Flow_13</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:endEvent id="EndEvent_PayoutComplete" name="Виплату проведено, клієнта сповіщено">
+      <bpmn:incoming>Flow_13</bpmn:incoming>
+      <bpmn:messageEventDefinition id="MsgDef_End" />
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="StartEvent_CallReceived" targetRef="Task_RegisterJournal" />
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_RegisterJournal" targetRef="Task_FindAgentByPhone" />
+    <bpmn:sequenceFlow id="Flow_3" sourceRef="Task_FindAgentByPhone" targetRef="Task_VisitAccidentSite" />
+    <bpmn:sequenceFlow id="Flow_4" sourceRef="Task_VisitAccidentSite" targetRef="Task_PaperProtocol" />
+    <bpmn:sequenceFlow id="Flow_5" sourceRef="Task_PaperProtocol" targetRef="Task_DeliverDocsToOffice" />
+    <bpmn:sequenceFlow id="Flow_6" sourceRef="Task_DeliverDocsToOffice" targetRef="Gateway_MergeDocs" />
+    <bpmn:sequenceFlow id="Flow_7" sourceRef="Gateway_MergeDocs" targetRef="Task_ManualVerifyDocs" />
+    <bpmn:sequenceFlow id="Flow_8" sourceRef="Task_ManualVerifyDocs" targetRef="Gateway_DocsComplete" />
+    <bpmn:sequenceFlow id="Flow_DocsNo" name="Ні (потребує доопрацювання)" sourceRef="Gateway_DocsComplete" targetRef="Task_RequestClarification" />
+    <bpmn:sequenceFlow id="Flow_ReworkDone" sourceRef="Task_RequestClarification" targetRef="Gateway_MergeDocs" />
+    <bpmn:sequenceFlow id="Flow_DocsYes" name="Так" sourceRef="Gateway_DocsComplete" targetRef="Task_ManualExcelCalc" />
+    <bpmn:sequenceFlow id="Flow_9" sourceRef="Task_ManualExcelCalc" targetRef="Gateway_IsCovered" />
+    <bpmn:sequenceFlow id="Flow_CoveredYes" name="Так" sourceRef="Gateway_IsCovered" targetRef="Task_PaperClaimAct" />
+    <bpmn:sequenceFlow id="Flow_CoveredNo" name="Ні (нестраховий випадок)" sourceRef="Gateway_IsCovered" targetRef="Task_SendRejectionLetter" />
+    <bpmn:sequenceFlow id="Flow_10" sourceRef="Task_PaperClaimAct" targetRef="Task_ManualPaymentOrder" />
+    <bpmn:sequenceFlow id="Flow_11" sourceRef="Task_SendRejectionLetter" targetRef="EndEvent_ClaimRejected" />
+    <bpmn:sequenceFlow id="Flow_12" sourceRef="Task_ManualPaymentOrder" targetRef="Task_ExecuteBankTransfer" />
+    <bpmn:sequenceFlow id="Flow_13" sourceRef="Task_ExecuteBankTransfer" targetRef="EndEvent_PayoutComplete" />
+  </bpmn:process>
+</bpmn:definitions>

@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_ToBe_Var9"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:collaboration id="Collaboration_ToBe_Var9">
+    <bpmn:participant id="Participant_MobileApp" name="Клієнт — Мобільний додаток страхової компанії (Black Box)" />
+    <bpmn:participant id="Participant_Insurance_ToBe" name="Страхова компанія (Інтелектуальне врегулювання ДТП — To-Be)" processRef="Process_Insurance_ToBe" />
+    <bpmn:messageFlow id="MsgFlow_ToBe_1" name="1. POST /claims (фото ДТП + геолокація)" sourceRef="Participant_MobileApp" targetRef="StartEvent_ApiClaimReceived" />
+    <bpmn:messageFlow id="MsgFlow_ToBe_2" name="Push: Поліс неактивний" sourceRef="ServiceTask_PushInvalidPolicy" targetRef="Participant_MobileApp" />
+    <bpmn:messageFlow id="MsgFlow_ToBe_3" name="Push: Рішення про відмову" sourceRef="ServiceTask_NotifyExpertReject" targetRef="Participant_MobileApp" />
+    <bpmn:messageFlow id="MsgFlow_ToBe_4" name="2. Зарахування коштів + PDF-акт" sourceRef="EndEvent_InstantPayoutDone" targetRef="Participant_MobileApp" />
+  </bpmn:collaboration>
+
+  <bpmn:process id="Process_Insurance_ToBe" isExecutable="true">
+    <bpmn:laneSet id="LaneSet_ToBe">
+      <bpmn:lane id="Lane_DigitalPlatform" name="Цифрова платформа BPM, CRM/ERP та Payment API">
+        <bpmn:flowNodeRef>StartEvent_ApiClaimReceived</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>ServiceTask_ValidatePolicyCRM</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_PolicyActive</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>ServiceTask_PushInvalidPolicy</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>EndEvent_InvalidPolicy</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_MergePayout</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>ServiceTask_GenerateElectronicAct</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>ServiceTask_ExecutePaymentAPI</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>EndEvent_InstantPayoutDone</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_AI_IDP" name="ШІ-модуль Computer Vision (IDP) та бізнес-правила (DMN)">
+        <bpmn:flowNodeRef>ServiceTask_ComputerVisionIDP</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>BoundaryEvent_CVError</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>BusinessRuleTask_DMNCalc</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_ConfidenceAndLimit</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_ExpertHITL" name="Експерт-урегулювальник (Human-in-the-loop)">
+        <bpmn:flowNodeRef>Gateway_MergeExceptions</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>UserTask_ExpertVerification</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_ExpertApproved</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>ServiceTask_NotifyExpertReject</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>EndEvent_ExpertRejected</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+
+    <bpmn:startEvent id="StartEvent_ApiClaimReceived" name="Отримано фото ДТП та заявку через API">
+      <bpmn:outgoing>Flow_TB_1</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_TB_Start" />
+    </bpmn:startEvent>
+
+    <bpmn:serviceTask id="ServiceTask_ValidatePolicyCRM" name="Перевірити поліс, ліміти та геомітку ДТП у CRM (REST API запит)">
+      <bpmn:incoming>Flow_TB_1</bpmn:incoming>
+      <bpmn:outgoing>Flow_TB_2</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:exclusiveGateway id="Gateway_PolicyActive" name="Поліс активний?">
+      <bpmn:incoming>Flow_TB_2</bpmn:incoming>
+      <bpmn:outgoing>Flow_PolicyNo</bpmn:outgoing>
+      <bpmn:outgoing>Flow_PolicyYes</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:serviceTask id="ServiceTask_PushInvalidPolicy" name="Надіслати push-відмову (поліс недійсний)">
+      <bpmn:incoming>Flow_PolicyNo</bpmn:incoming>
+      <bpmn:outgoing>Flow_TB_3</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="EndEvent_InvalidPolicy" name="Заявку відхилено">
+      <bpmn:incoming>Flow_TB_3</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:serviceTask id="ServiceTask_ComputerVisionIDP" name="Розпізнати пошкодження авто та документи за фото (Computer Vision / IDP)">
+      <bpmn:incoming>Flow_PolicyYes</bpmn:incoming>
+      <bpmn:outgoing>Flow_TB_4</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:boundaryEvent id="BoundaryEvent_CVError" name="Помилка CV / нечіткі фото" attachedToRef="ServiceTask_ComputerVisionIDP">
+      <bpmn:outgoing>Flow_CVErrorFallback</bpmn:outgoing>
+      <bpmn:errorEventDefinition id="ErrDef_CV" />
+    </bpmn:boundaryEvent>
+
+    <bpmn:businessRuleTask id="BusinessRuleTask_DMNCalc" name="Розрахувати калькуляцію збитків і перевірити ліміти (Таблиця правил DMN)">
+      <bpmn:incoming>Flow_TB_4</bpmn:incoming>
+      <bpmn:outgoing>Flow_TB_5</bpmn:outgoing>
+    </bpmn:businessRuleTask>
+
+    <bpmn:exclusiveGateway id="Gateway_ConfidenceAndLimit" name="Confidence &gt;= 85% і сума в ліміті?">
+      <bpmn:incoming>Flow_TB_5</bpmn:incoming>
+      <bpmn:outgoing>Flow_STP_Yes</bpmn:outgoing>
+      <bpmn:outgoing>Flow_HITL_No</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:exclusiveGateway id="Gateway_MergeExceptions" name="Злиття винятків">
+      <bpmn:incoming>Flow_CVErrorFallback</bpmn:incoming>
+      <bpmn:incoming>Flow_HITL_No</bpmn:incoming>
+      <bpmn:outgoing>Flow_TB_6</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:userTask id="UserTask_ExpertVerification" name="Верифікувати пошкодження вручну та скоригувати суму (Human-in-the-loop)">
+      <bpmn:incoming>Flow_TB_6</bpmn:incoming>
+      <bpmn:outgoing>Flow_TB_7</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:exclusiveGateway id="Gateway_ExpertApproved" name="Виплату схвалено?">
+      <bpmn:incoming>Flow_TB_7</bpmn:incoming>
+      <bpmn:outgoing>Flow_ExpYes</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ExpNo</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:serviceTask id="ServiceTask_NotifyExpertReject" name="Сформувати мотивовану відмову в особистому кабінеті клієнта">
+      <bpmn:incoming>Flow_ExpNo</bpmn:incoming>
+      <bpmn:outgoing>Flow_TB_8</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="EndEvent_ExpertRejected" name="У виплаті відмовлено">
+      <bpmn:incoming>Flow_TB_8</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:exclusiveGateway id="Gateway_MergePayout" name="Злиття на виплату">
+      <bpmn:incoming>Flow_STP_Yes</bpmn:incoming>
+      <bpmn:incoming>Flow_ExpYes</bpmn:incoming>
+      <bpmn:outgoing>Flow_TB_9</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:serviceTask id="ServiceTask_GenerateElectronicAct" name="Згенерувати електронний страховий акт з КЕП у ERP-системі">
+      <bpmn:incoming>Flow_TB_9</bpmn:incoming>
+      <bpmn:outgoing>Flow_TB_10</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="ServiceTask_ExecutePaymentAPI" name="Провести миттєву автовиплату на картку (Payment Gateway API)">
+      <bpmn:incoming>Flow_TB_10</bpmn:incoming>
+      <bpmn:outgoing>Flow_TB_11</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="EndEvent_InstantPayoutDone" name="Кошти виплачено, push-звіт надіслано">
+      <bpmn:incoming>Flow_TB_11</bpmn:incoming>
+      <bpmn:messageEventDefinition id="MsgDef_TB_End" />
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="Flow_TB_1" sourceRef="StartEvent_ApiClaimReceived" targetRef="ServiceTask_ValidatePolicyCRM" />
+    <bpmn:sequenceFlow id="Flow_TB_2" sourceRef="ServiceTask_ValidatePolicyCRM" targetRef="Gateway_PolicyActive" />
+    <bpmn:sequenceFlow id="Flow_PolicyNo" name="Ні" sourceRef="Gateway_PolicyActive" targetRef="ServiceTask_PushInvalidPolicy" />
+    <bpmn:sequenceFlow id="Flow_TB_3" sourceRef="ServiceTask_PushInvalidPolicy" targetRef="EndEvent_InvalidPolicy" />
+    <bpmn:sequenceFlow id="Flow_PolicyYes" name="Так" sourceRef="Gateway_PolicyActive" targetRef="ServiceTask_ComputerVisionIDP" />
+    <bpmn:sequenceFlow id="Flow_TB_4" sourceRef="ServiceTask_ComputerVisionIDP" targetRef="BusinessRuleTask_DMNCalc" />
+    <bpmn:sequenceFlow id="Flow_CVErrorFallback" name="Обробка збою (Fallback)" sourceRef="BoundaryEvent_CVError" targetRef="Gateway_MergeExceptions" />
+    <bpmn:sequenceFlow id="Flow_TB_5" sourceRef="BusinessRuleTask_DMNCalc" targetRef="Gateway_ConfidenceAndLimit" />
+    <bpmn:sequenceFlow id="Flow_STP_Yes" name="Так (Автоузгодження STP)" sourceRef="Gateway_ConfidenceAndLimit" targetRef="Gateway_MergePayout" />
+    <bpmn:sequenceFlow id="Flow_HITL_No" name="Ні (потребує перевірки експертом)" sourceRef="Gateway_ConfidenceAndLimit" targetRef="Gateway_MergeExceptions" />
+    <bpmn:sequenceFlow id="Flow_TB_6" sourceRef="Gateway_MergeExceptions" targetRef="UserTask_ExpertVerification" />
+    <bpmn:sequenceFlow id="Flow_TB_7" sourceRef="UserTask_ExpertVerification" targetRef="Gateway_ExpertApproved" />
+    <bpmn:sequenceFlow id="Flow_ExpYes" name="Так (Схвалено експертом)" sourceRef="Gateway_ExpertApproved" targetRef="Gateway_MergePayout" />
+    <bpmn:sequenceFlow id="Flow_ExpNo" name="Ні" sourceRef="Gateway_ExpertApproved" targetRef="ServiceTask_NotifyExpertReject" />
+    <bpmn:sequenceFlow id="Flow_TB_8" sourceRef="ServiceTask_NotifyExpertReject" targetRef="EndEvent_ExpertRejected" />
+    <bpmn:sequenceFlow id="Flow_TB_9" sourceRef="Gateway_MergePayout" targetRef="ServiceTask_GenerateElectronicAct" />
+    <bpmn:sequenceFlow id="Flow_TB_10" sourceRef="ServiceTask_GenerateElectronicAct" targetRef="ServiceTask_ExecutePaymentAPI" />
+    <bpmn:sequenceFlow id="Flow_TB_11" sourceRef="ServiceTask_ExecutePaymentAPI" targetRef="EndEvent_InstantPayoutDone" />
+  </bpmn:process>
+</bpmn:definitions>
